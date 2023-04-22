@@ -1,0 +1,8 @@
+make --dry-run --keep-going --print-directory
+make: Entering directory '/home/user/Downloads/PA2'
+gcc -c tcp_server.c -o server.o
+gcc -c helpers.c -o helpers.o
+cc    -c -o helpers.o helpers.c
+gcc server.o -o server
+make: Leaving directory '/home/user/Downloads/PA2'
+ 
