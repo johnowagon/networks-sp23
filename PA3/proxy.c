@@ -120,10 +120,12 @@ int main(int argc, char** argv){
             continue;
         }
 
+        /*
         inet_ntop(their_addr.ss_family,
             get_in_addr((struct sockaddr *)&their_addr),
             s, sizeof s);
         printf("server: got connection from %s\n", s);
+        */
 
         bzero(request, sizeof(request));
         while (!doneReceiving(request, REQUEST_BUFFER_SIZE) 
@@ -163,87 +165,16 @@ int main(int argc, char** argv){
         
         if (!fork()) { // this is the child process
             close(sockfd); // child doesn't need the listener
-            sresponse = verify(crequest);
-            if (sresponse == NULL){
-                printf("Error with verify.\n");
-                break;
-            }
+            printf("in child\n");
+            remove_header(request, "If-Modified-Since: ");
+            printf("%s", request);
+
+            handle_req(request, new_fd);
             
-            if (crequest->reqHost != NULL && strcmp(crequest->reqHost, "localhost") != 0 && strcmp(crequest->reqHost, "127.0.0.1") != 0){
-                // Send request to specified host by opening another socket.
-                // If error, do not forward.
-                host = gethostbyname(crequest->reqHost);
-                printf("res: %d", sresponse->responsecode);
-                if(sresponse->responsecode == 400 || sresponse->responsecode == 403 || host == NULL){
-                    printf("HERE?\n");
-                    bytes_written += formatresheaders(response, sresponse);
-                    if(send(new_fd, response, bytes_written, 0) < 0){
-                        perror("send");
-                        break;
-                    }
-                    break;
-                }
-                memset(&chints, 0, sizeof hints);
-                chints.ai_family = AF_UNSPEC;
-                chints.ai_socktype = SOCK_STREAM;
-                chints.ai_protocol = IPPROTO_TCP;
-
-                if ((rv = getaddrinfo(crequest->reqHost, crequest->reqPortno, &chints, &servinfo)) != 0) {
-                    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-                    return 1;
-                }
-
-                // loop through all the results and connect to the first we can
-                for(p = servinfo; p != NULL; p = p->ai_next) {
-                    if ((req_fd = socket(p->ai_family, p->ai_socktype,
-                            p->ai_protocol)) == -1) {
-                        perror("client: socket");
-                        continue;
-                    }
-
-                    if (connect(req_fd, p->ai_addr, p->ai_addrlen) == -1) {
-                        close(req_fd);
-                        perror("client: connect");
-                        continue;
-                    }
-                    
-                    break;
-                }
-                freeaddrinfo(servinfo);
-                purgeexpired(ttl);
-                printf("Forwarding request...\n");
-                //printf("%s\n", request);
-                forward_and_respond2(new_fd, req_fd, request, crequest);
-                printf("done.\n");
-                close(req_fd);
-
-            }else{
-                // Otherwise, the request was meant for us.
-                // Send headers first, then send requested file if OK
-                bytes_written += formatresheaders(response, sresponse);
-                if(send(new_fd, response, bytes_written, 0) < 0){
-                    perror("send");
-                    break;
-                }
-                else if (sresponse->responsecode != 200){
-                    break;
-                }
-
-                printresheaders(sresponse);
-                // Get filesize first to compare the send results.
-                filesize = getfilesize(sresponse->uri);
-                bytes_sent = sendftosock(new_fd, sresponse->uri, 0);
-                //printf("filesize: %d\nbytes_sent: %d\nuri: %s\n", filesize, bytes_sent, sresponse->uri);
-                if (bytes_sent < filesize){
-                    // Resend rest of file contents.
-                    while(bytes_sent < filesize)
-                        bytes_sent += sendftosock(new_fd, sresponse->uri, bytes_sent);
-                }
-            }
             free(crequest);
-            free(sresponse);
+            //free(sresponse);
             close(new_fd);
-            bzero(response, sizeof(*response));
+            bzero(request, sizeof(*request));
             exit(0);
         }
         close(new_fd);  // parent doesn't need this

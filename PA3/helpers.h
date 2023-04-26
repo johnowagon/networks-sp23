@@ -47,9 +47,13 @@ char* getmimetype(char* filename);
 void printresheaders(struct Response* res);
 int sendftosock(int sockfd, char* filename, int filepos);
 int forward_and_respond2(int from_sockfd, int to_sockfd, char* request, struct Request* resp);
+int forward_and_respond3(int from_sockfd, int to_sockfd, char* request, struct Request* resp);
 int prefetch(char* response, int size, int sockfd); // Attempts to prefetch links on a given page/ section of a page.
 int doneReceiving(char* request, int size);
 int isIP(char* hostname);
 char* getIp(char* hostname);
 char* getHostname(char* IP);
 int getcontentlength(char* response);
+int handle_req(char* request, int from);
+int send403(int sockfd);
+void remove_header(char* request, const char* header_name);

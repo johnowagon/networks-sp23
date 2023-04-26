@@ -408,6 +408,8 @@ struct Request* parse(char* requestbuf){
                 crequest->reqURI = realloc(crequest->reqURI, bytesToSpace + 10);
                 char* tmpstring = crequest->reqURI;
                 sprintf(crequest->reqURI, "%s%s", tmpstring, "index.html");
+            }else if (strstr(crequest->reqURI, "http") == 0){
+                // Do something.
             }
             tmpbuf += bytesToSpace + 1; // Move past URI
             
@@ -469,12 +471,15 @@ int sendftosock(int sockfd, char* filename, int filepos){
     FILE *fp;
     char data[1024];
     char full_path[512];
+    char* curfile;
 
     if (strstr(filename, "cache") != 0){
         fp = fopen(filename, "r");
+        curfile = filename;
     }else{
         sprintf(full_path, "%s%s", "./www", filename);
         fp = fopen(full_path, "r");
+        curfile = full_path;
     }
 
     if (fp != NULL){
@@ -490,7 +495,7 @@ int sendftosock(int sockfd, char* filename, int filepos){
             bzero(data, 1024);
         }
     }else{
-        printf("Problem opening file %s.\n", full_path);
+        printf("Problem opening file %s.\n", curfile);
     }
     
     fclose(fp);
@@ -550,6 +555,7 @@ int forward_and_respond2(int from_sockfd, int to_sockfd, char* request, struct R
     sprintf(fname,".%s/%lu", DIR, hashed);
     
     // Attempt to ca_get
+    printf("full_length: %s\nfname: %s\n", full_length_url, fname);
     full_path = ca_get(full_length_url);
     if (full_path != NULL){
         // Page is cached
@@ -614,4 +620,164 @@ int forward_and_respond2(int from_sockfd, int to_sockfd, char* request, struct R
     }
 
     return 0;
+}
+
+int forward_and_respond3(int from_sockfd, int to_sockfd, char* request, struct Request* req_){
+    int bufsize = 65536; // Can lower this 
+    char response[bufsize];
+    char fname[100];
+    int bytes_recvd, bytes_written, content_length, request_size;
+    int bytes_sent = 0;
+    int bytes_cached = 0;
+    char full_length_url[256];
+    char* full_path;
+    int files = getfileamt(); // Amount of files in cache
+    // Construct url+uri
+    sprintf(full_length_url, "%s%s", req_->reqHost, req_->reqURI);
+    unsigned long hashed = hash(full_length_url);
+    sprintf(fname,".%s/%lu", DIR, hashed);
+    
+    // Attempt to ca_get
+    printf("full_length: %s\nfname: %s\n", full_length_url, fname);
+    full_path = ca_get(full_length_url);
+    if (full_path != NULL){
+        printf("page is cached\n");
+        bytes_sent = sendftosock(to_sockfd, full_path, 0);
+        printf("bytes_sent: %d\n", bytes_sent);
+    }else{
+        printf("page is not cached\n");
+
+        // Send initial request
+        if(send(to_sockfd, request, getreqsize(request), 0) < 0){
+            perror("fsend");
+            return -1;
+        }
+
+        // Peek at the response before saving, to determine content length.
+        if((bytes_recvd = recv(to_sockfd, response, sizeof(response), MSG_PEEK)) < 0){
+            perror("recv");
+            return -1;
+        }
+
+        content_length = getcontentlength(response);
+        request_size = getreqsize(response);
+        printf("content-length: %d\n", content_length);
+        //printf("%s\n", response);
+        bzero(response, sizeof(response));
+
+        while(bytes_sent < content_length + request_size){
+            // While still receiving files
+            if ((bytes_recvd = recv(to_sockfd, response, sizeof(response), 0)) < 0){
+                perror("recv");
+                break;
+            }
+            if((bytes_sent += send(from_sockfd, response, bytes_recvd, 0)) < 0){
+                perror("fsend");
+                return -1;
+            }
+            if (bytes_recvd == 0){
+                break;
+            }
+            if (files < CACHE_SIZE)
+                bytes_cached += ca_put(full_length_url, response, bytes_recvd, bytes_cached);
+            printf("Recvd: %d bytes\n", bytes_recvd);
+            printf("Sent %d bytes\n", bytes_sent);
+            printf("Cached %d bytes\n", bytes_cached);
+            printf("tol: %d\n", content_length + request_size);
+
+            bzero(response, sizeof(response));
+        }
+    }
+    return 0;
+}
+
+
+int handle_req(char* request, int from){
+    struct addrinfo hints, chints, *servinfo, *p;
+    struct Request* crequest; // Client request
+    int req_fd, rv;
+    int ttl = 10; // Time to live for cached pages
+
+    crequest = parse(request);
+
+    //host = gethostbyname(crequest->reqHost);
+    /*printf("res: %d", sresponse->responsecode);
+    if(sresponse->responsecode == 400 || sresponse->responsecode == 403 || host == NULL){
+        bytes_written += formatresheaders(response, sresponse);
+        if(send(new_fd, response, bytes_written, 0) < 0){
+            perror("send");
+            break;
+        }
+        break;
+    }*/
+    memset(&chints, 0, sizeof hints);
+    chints.ai_family = AF_UNSPEC;
+    chints.ai_socktype = SOCK_STREAM;
+    chints.ai_protocol = IPPROTO_TCP;
+
+    if ((rv = getaddrinfo(crequest->reqHost, crequest->reqPortno, &chints, &servinfo)) != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+        return 1;
+    }
+
+    // loop through all the results and connect to the first we can
+    for(p = servinfo; p != NULL; p = p->ai_next) {
+        if ((req_fd = socket(p->ai_family, p->ai_socktype,
+                p->ai_protocol)) == -1) {
+            perror("client: socket");
+            continue;
+        }
+
+        if (connect(req_fd, p->ai_addr, p->ai_addrlen) == -1) {
+            close(req_fd);
+            perror("client: connect");
+            continue;
+        }
+        
+        break;
+    }
+    freeaddrinfo(servinfo);
+    purgeexpired(ttl);
+    printf("Forwarding request...\n");
+    //printf("%s\n", request);
+    if (blocked(crequest->reqHost)){
+        send403(from);
+        close(req_fd);
+        return 0;
+    }
+    forward_and_respond3(from, req_fd, request, crequest);
+    printf("done.\n");
+    close(req_fd);
+    return 0;
+}
+
+int send403(int sockfd){
+    printf("sending 403\n");
+    if(send(sockfd, "HTTP/1.1 403 Forbidden\r\n\r\n", sizeof("HTTP/1.1 403 Forbidden\r\n\r\n"), 0) < 0){
+        perror("fsend");
+        return -1;
+    }
+    return 0;
+}
+
+void remove_header(char* request, const char* header_name) {
+    // This code was generated by ChatGPT. Neat!
+    char* start = strstr(request, header_name); // Find the header in the request
+    if (start != NULL) {
+        // Move the start pointer to the end of the header name
+        //start += strlen(header_name);
+
+        // Find the end of the header value
+        char* end = strstr(start, "\r\n");
+        if (end != NULL) {
+            // Move the end pointer to the beginning of the next line
+            end += 2;
+
+            // Calculate the length of the header line to remove
+            int length = end - start;
+
+            // Remove the header line from the request by shifting the remaining data to the left
+            memmove(start, end, strlen(end) + 1);
+        }
+    }
 }
