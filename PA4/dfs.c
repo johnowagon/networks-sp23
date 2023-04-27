@@ -13,24 +13,6 @@
 #include "helpers.h"
 
 int main(int argc, char** argv){
-    /*
-        Implement a protocol to handle requests for files
-        "GET <filename>, PUT <filename>, LIST, STATUS"
-
-        If the server receives a STATUS cmd, the current status of the server is returned.
-        "READY,SENDING"
-
-        What dfs server knows (dumb):
-            - filename
-            - any data associated with the filename
-            (does not necessarily know the full size)
-        What dfc knows (smart):
-            - filename
-            - true filesize
-            - chunk positions
-            - # of chunks in a file
-            - dfs server names, IP, port
-    */
     int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *servinfo, *p;
     struct sockaddr_storage their_addr; // connector's address information

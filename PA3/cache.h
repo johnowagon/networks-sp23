@@ -1,4 +1,4 @@
-#define CACHE_SIZE 10
+#define CACHE_SIZE 25
 #define DIR "/cache"
 
 void purgeexpired(int ttl);

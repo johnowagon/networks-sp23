@@ -248,123 +248,6 @@ int blocked(char* hostname){
     return 0;
 }
 
-struct Response* verify(struct Request* crequest){
-    // Verifies a client request, returns a response.
-    struct Response* sresponse;
-    struct hostent *host;
-    sresponse = malloc(sizeof(struct Response));
-    memset(sresponse, 0, sizeof(Response));
-    int blcked = 0;
-    if(crequest == NULL){
-        // Malformed request, send a 400
-        sresponse->responsecode = 400;
-        sresponse->httpversion = "HTTP/1.1";
-        sresponse->content_length = 0;
-        return sresponse;
-    }
-
-    // Check http verb.
-    if(crequest->method != NULL && (strcmp(crequest->method, "POST") == 0 || strcmp(crequest->method, "PUT") == 0 || strcmp(crequest->method, "DELETE") == 0 
-        || strcmp(crequest->method, "PATCH") == 0 || strcmp(crequest->method, "HEAD") == 0 
-        || strcmp(crequest->method, "CONNECT") == 0)){
-        sresponse->responsecode = 405;
-        sresponse->content_length = 0;
-        sresponse->httpversion = "HTTP/1.1";
-        return sresponse;
-    }else if(strcmp(crequest->method, "GET") != 0){
-        // Else, request is probably malformed.
-        sresponse->responsecode = 400;
-        sresponse->content_length = 0;
-        sresponse->httpversion = "HTTP/1.1";
-        return sresponse;
-    }
-    
-    // Check http version.
-    if(crequest->httpversion != NULL && !invalidhttp(crequest->httpversion) && (strcmp(crequest->httpversion, "HTTP/1.1") != 0 && strcmp(crequest->httpversion, "HTTP/1.0") != 0)){
-        sresponse->responsecode = 505;
-        sresponse->content_length = 0;
-        sresponse->httpversion = "HTTP/1.1";
-        return sresponse;
-    }else if (invalidhttp(crequest->httpversion)){
-        // Wrong http!
-        sresponse->responsecode = 400;
-        sresponse->content_length = 0;
-        sresponse->httpversion = "HTTP/1.1";
-        return sresponse;
-    }
-
-    // Check file.
-    /*
-    if(crequest->reqURI != NULL && getfilesize(crequest->reqURI) < 0){
-        sresponse->content_length = 0;
-        switch(errno){
-            case ENOENT:
-                // File not found on server.
-                sresponse->httpversion = "HTTP/1.1";
-                sresponse->responsecode = 404;
-                break;
-            case EACCES:
-                // File permissions do not allow I/O.
-                sresponse->httpversion = "HTTP/1.1";
-                sresponse->responsecode = 403;
-                break;
-            default:
-                sresponse->httpversion = "HTTP/1.1";
-                sresponse->responsecode = 400;
-                break;
-        }
-        return sresponse;
-    }
-    */
-    // Check if requested host exists and on the blocklist.
-    if(crequest->reqHost != NULL){
-        blcked = blocked(crequest->reqHost);
-        host = gethostbyname(crequest->reqHost);
-    }else{
-        blcked = 0;
-    }
-    if(crequest->reqHost != NULL && host == NULL){
-        // Unknown host
-        sresponse->responsecode = 404;
-        sresponse->content_length = 0;
-        sresponse->httpversion = "HTTP/1.1";
-        return sresponse;
-    }else if(blcked == 1){
-        // Forbidden
-        sresponse->responsecode = 403;
-        sresponse->httpversion = "HTTP/1.1";
-        sresponse->content_length = 0;
-        return sresponse;
-    }
-
-    if (crequest->connection != NULL && strcasecmp(crequest->connection, "keep-alive") != 0 && strcasecmp(crequest->connection, "close") != 0){
-        // Malformed connection
-        sresponse->responsecode = 400;
-        sresponse->content_length = 0;
-        sresponse->httpversion = "HTTP/1.1";
-        return sresponse;
-    }
-
-    // Else, we are good.
-    sresponse->responsecode = 200;
-    sresponse->uri = crequest->reqURI;
-    sresponse->httpversion = crequest->httpversion;
-    sresponse->content_length = getfilesize(crequest->reqURI);
-    sresponse->content_type = getmimetype(sresponse->uri);
-    if(crequest->reqHost != NULL){
-        sresponse->tarHost = crequest->reqHost;
-    }
-    if (crequest->connection != NULL){
-        sresponse->connection = crequest->connection;
-    }else if (strcmp(crequest->httpversion, "HTTP/1.1") == 0){
-        sresponse->connection = "keep-alive";
-    }else{
-        sresponse->connection = "close";
-    }
-
-    return sresponse;
-}
-
 struct Request* parse(char* requestbuf){
     // Input agnostic parsing function. Will not error out if inputs are wrong
     // Verify function will do the verification.
@@ -391,11 +274,11 @@ struct Request* parse(char* requestbuf){
             return NULL;
         }
         if(i == 1){ // Only get these methods on the first iteration
-            crequest->method = calloc(bytesToSpace+1, sizeof(char));
-            memcpy(crequest->method, tmpbuf, bytesToSpace);
+            //crequest->method = calloc(bytesToSpace+1, sizeof(char));
+            //memcpy(crequest->method, tmpbuf, bytesToSpace);
             // In GET request header
             tmpbuf += bytesToSpace + 1; // Move past GET 
-            crequest->method[bytesToSpace+1] = '\0';
+            //crequest->method[bytesToSpace+1] = '\0';
             //memset(crequest->method+bytesToSpace+1, '\0', 1);
         
             // Next value is object URI
@@ -403,32 +286,21 @@ struct Request* parse(char* requestbuf){
             crequest->reqURI = calloc(bytesToSpace+1, sizeof(char));
             memcpy(crequest->reqURI, tmpbuf, bytesToSpace);
             crequest->reqURI[bytesToSpace+1] = '\0';
-            if(isDirectory(crequest->reqURI)){
-                // Look for index.html in any directories that dont specify a file.
-                crequest->reqURI = realloc(crequest->reqURI, bytesToSpace + 10);
-                char* tmpstring = crequest->reqURI;
-                sprintf(crequest->reqURI, "%s%s", tmpstring, "index.html");
-            }else if (strstr(crequest->reqURI, "http") == 0){
-                // Do something.
-            }
             tmpbuf += bytesToSpace + 1; // Move past URI
             
             // Next value is the http version.
-            bytesToSpace = strcspn(tmpbuf, "\r\n");
+            /*bytesToSpace = strcspn(tmpbuf, "\r\n");
             crequest->httpversion = calloc(bytesToSpace+1, sizeof(char));
             memcpy(crequest->httpversion, tmpbuf, 8);
-            crequest->httpversion[bytesToSpace+1] = '\0';
+            crequest->httpversion[bytesToSpace+1] = '\0';*/
         }else if(memcmp(tmpbuf, "Host:", bytesToSpace) == 0){
             tmpbuf += bytesToSpace + 1;
            
             if((bytesToSpace = strcspn(tmpbuf, ":")) != strlen(tmpbuf)){
                 // If there is a provided port number
-                printf("tmp: %s\n", tmpbuf);
                 crequest->reqHost = malloc(bytesToSpace + 1);
                 memcpy(crequest->reqHost, tmpbuf, bytesToSpace);
                 crequest->reqHost[bytesToSpace + 1] = '\0';
-                printf("tmp: %s\n", tmpbuf);
-
 
                 // Move past hostname, get port number
                 tmpbuf += bytesToSpace + 1;
@@ -436,7 +308,6 @@ struct Request* parse(char* requestbuf){
                 crequest->reqPortno = malloc(bytesToSpace + 1);
                 memcpy(crequest->reqPortno, tmpbuf, bytesToSpace);
                 crequest->reqPortno[bytesToSpace+1] = '\0';
-                printf("tmp: %s\n", tmpbuf);
             }else{
                 // Extract hostname
                 bytesToSpace = strcspn(tmpbuf, "\r\n");
@@ -537,91 +408,6 @@ int getcontentlength(char* response){
     return 0;
 }
 
-int forward_and_respond2(int from_sockfd, int to_sockfd, char* request, struct Request* req_){
-    // Plan: Try to fetch page from the cache, if failed send the request to the given server.
-    // Fetch contents from other server, parse content_length so we know how big the file is.
-    // Save file, then send the file back to the client.
-    int bufsize = 65536; // Can lower this 
-    char response[bufsize];
-    char fname[100];
-    int bytes_recvd, bytes_written, content_length, request_size;
-    int bytes_cached = 0;
-    char full_length_url[256];
-    char* full_path;
-    int files = getfileamt(); // Amount of files in cache
-    // Construct url+uri
-    sprintf(full_length_url, "%s%s", req_->reqHost, req_->reqURI);
-    unsigned long hashed = hash(full_length_url);
-    sprintf(fname,".%s/%lu", DIR, hashed);
-    
-    // Attempt to ca_get
-    printf("full_length: %s\nfname: %s\n", full_length_url, fname);
-    full_path = ca_get(full_length_url);
-    if (full_path != NULL){
-        // Page is cached
-        bytes_written = sendftosock(from_sockfd, full_path, 0);
-        if(bytes_written < 0){
-            perror("sendftosock");
-            return -1;
-        }
-    }else{
-        // Page is not cached
-        if(send(to_sockfd, request, getreqsize(request), 0) < 0){
-            perror("fsend");
-            return -1;
-        }
-
-        // Peek at the response before saving, to determine content length.
-        if((bytes_recvd = recv(to_sockfd, response, sizeof(response), MSG_PEEK)) < 0){
-            perror("recv");
-            return -1;
-        }
-
-        //byytes_cached += ca_put(full_length_url, response, bytesZ)
-        content_length = getcontentlength(response);
-        request_size = getreqsize(response);
-        printf("content-length: %d\n", content_length);
-        //printf("%s\n", response);
-        bzero(response, sizeof(response));
-
-        while(bytes_cached < content_length + request_size){
-            // This is taking a long time since the connection stays alive with the keep-alive header.
-            // Try to parse the content length and go from there for better results.
-            if((bytes_recvd = recv(to_sockfd, response, sizeof(response), 0)) < 0){
-                perror("recv");
-                return -1;
-            }else if(bytes_recvd == 0){
-                break;
-            }
-            // Receive contents and save
-            printf("Received %d bytes\n", bytes_recvd);
-            if(files >= CACHE_SIZE){
-                // If cache is full
-                if((bytes_cached += send(to_sockfd, response, bytes_recvd, 0)) < 0){
-                    perror("fsend");
-                    return -1;
-                }
-                printf("Sent %d bytes\n", bytes_cached);
-            }else{
-                if((bytes_cached += ca_put(full_length_url, response, bytes_recvd, bytes_cached)) < 0){
-                    perror("cached");
-                    break;
-                }
-                printf("Cached %d bytes\n", bytes_cached);
-            }
-            
-            // Reset response buffer
-            bzero(response, sizeof(response));
-        }
-
-        // Send file contents
-        if (files < CACHE_SIZE)
-            sendftosock(from_sockfd, fname, 0);
-    }
-
-    return 0;
-}
-
 int forward_and_respond3(int from_sockfd, int to_sockfd, char* request, struct Request* req_){
     int bufsize = 65536; // Can lower this 
     char response[bufsize];
@@ -632,17 +418,19 @@ int forward_and_respond3(int from_sockfd, int to_sockfd, char* request, struct R
     char full_length_url[256];
     char* full_path;
     int files = getfileamt(); // Amount of files in cache
+    int i = 0;
     // Construct url+uri
     sprintf(full_length_url, "%s%s", req_->reqHost, req_->reqURI);
     unsigned long hashed = hash(full_length_url);
     sprintf(fname,".%s/%lu", DIR, hashed);
     
     // Attempt to ca_get
-    printf("full_length: %s\nfname: %s\n", full_length_url, fname);
+    //printf("full_length: %s\nfname: %s\n", full_length_url, fname);
     full_path = ca_get(full_length_url);
     if (full_path != NULL){
         printf("page is cached\n");
-        bytes_sent = sendftosock(to_sockfd, full_path, 0);
+        printf("%s\n", full_path);
+        bytes_sent = sendftosock(from_sockfd, full_path, 0);
         printf("bytes_sent: %d\n", bytes_sent);
     }else{
         printf("page is not cached\n");
@@ -653,24 +441,22 @@ int forward_and_respond3(int from_sockfd, int to_sockfd, char* request, struct R
             return -1;
         }
 
-        // Peek at the response before saving, to determine content length.
-        if((bytes_recvd = recv(to_sockfd, response, sizeof(response), MSG_PEEK)) < 0){
-            perror("recv");
-            return -1;
-        }
-
-        content_length = getcontentlength(response);
-        request_size = getreqsize(response);
-        printf("content-length: %d\n", content_length);
-        //printf("%s\n", response);
-        bzero(response, sizeof(response));
-
-        while(bytes_sent < content_length + request_size){
+        while(1){
+            i++;
             // While still receiving files
             if ((bytes_recvd = recv(to_sockfd, response, sizeof(response), 0)) < 0){
                 perror("recv");
                 break;
             }
+
+            printf("%s", response);
+            if (i == 1){
+                // On first iteration
+                content_length = getcontentlength(response);
+                request_size = getreqsize(response);
+                printf("Cont: %d\nhsize: %d\n", content_length, request_size);
+            }
+
             if((bytes_sent += send(from_sockfd, response, bytes_recvd, 0)) < 0){
                 perror("fsend");
                 return -1;
@@ -680,10 +466,14 @@ int forward_and_respond3(int from_sockfd, int to_sockfd, char* request, struct R
             }
             if (files < CACHE_SIZE)
                 bytes_cached += ca_put(full_length_url, response, bytes_recvd, bytes_cached);
+            
             printf("Recvd: %d bytes\n", bytes_recvd);
             printf("Sent %d bytes\n", bytes_sent);
             printf("Cached %d bytes\n", bytes_cached);
             printf("tol: %d\n", content_length + request_size);
+            
+            if (bytes_sent >= content_length + request_size)
+                break;
 
             bzero(response, sizeof(response));
         }
@@ -698,22 +488,20 @@ int handle_req(char* request, int from){
     int req_fd, rv;
     int ttl = 10; // Time to live for cached pages
 
+    printf("req: %s\nend\n", request);
     crequest = parse(request);
 
-    //host = gethostbyname(crequest->reqHost);
-    /*printf("res: %d", sresponse->responsecode);
-    if(sresponse->responsecode == 400 || sresponse->responsecode == 403 || host == NULL){
-        bytes_written += formatresheaders(response, sresponse);
-        if(send(new_fd, response, bytes_written, 0) < 0){
-            perror("send");
-            break;
-        }
-        break;
-    }*/
+    if (crequest->reqHost == NULL || crequest->reqPortno == NULL){
+        send404(from);
+        return -1;
+    }
+    
     memset(&chints, 0, sizeof hints);
     chints.ai_family = AF_UNSPEC;
     chints.ai_socktype = SOCK_STREAM;
     chints.ai_protocol = IPPROTO_TCP;
+
+    printf("info: %s %s %s\n", crequest->reqHost, crequest->reqPortno, crequest->reqURI);
 
     if ((rv = getaddrinfo(crequest->reqHost, crequest->reqPortno, &chints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
@@ -742,18 +530,25 @@ int handle_req(char* request, int from){
     //printf("%s\n", request);
     if (blocked(crequest->reqHost)){
         send403(from);
-        close(req_fd);
         return 0;
     }
     forward_and_respond3(from, req_fd, request, crequest);
     printf("done.\n");
-    close(req_fd);
     return 0;
 }
 
 int send403(int sockfd){
     printf("sending 403\n");
     if(send(sockfd, "HTTP/1.1 403 Forbidden\r\n\r\n", sizeof("HTTP/1.1 403 Forbidden\r\n\r\n"), 0) < 0){
+        perror("fsend");
+        return -1;
+    }
+    return 0;
+}
+
+int send404(int sockfd){
+    printf("sending 404\n");
+    if(send(sockfd, "HTTP/1.1 404 Not Found\r\n\r\n", sizeof("HTTP/1.1 404 Not Found\r\n\r\n"), 0) < 0){
         perror("fsend");
         return -1;
     }

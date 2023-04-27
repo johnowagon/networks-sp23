@@ -108,6 +108,29 @@ int get_fd_from_ip_port(char* IP, char* port){
     return sockfd;
 }
 
+int count_lines(FILE* file)
+{
+    // I got this code from https://stackoverflow.com/questions/12733105/c-function-that-counts-lines-in-file
+    char buf[65536];
+    int counter = 0;
+    for(;;)
+    {
+        size_t res = fread(buf, 1, 65536, file);
+        if (ferror(file))
+            return -1;
+
+        int i;
+        for(i = 0; i < res; i++)
+            if (buf[i] == '\n')
+                counter++;
+
+        if (feof(file))
+            break;
+    }
+
+    return counter;
+}
+
 void sigchld_handler(int s)
 {
     // waitpid() might overwrite errno, so we save and restore it:

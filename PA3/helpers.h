@@ -57,3 +57,4 @@ int getcontentlength(char* response);
 int handle_req(char* request, int from);
 int send403(int sockfd);
 void remove_header(char* request, const char* header_name);
+int send404(int sockfd);

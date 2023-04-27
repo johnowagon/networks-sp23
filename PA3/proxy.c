@@ -18,26 +18,19 @@
 #define RESPONSE_BUFFER_SIZE 65536
 
 int main(int argc, char** argv){
-    int sockfd, new_fd, req_fd;  // listen on sock_fd, new connection on new_fd
-    struct addrinfo hints, chints, *servinfo, *p;
+    int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
+    struct addrinfo hints, *servinfo, *p;
     struct sockaddr_storage their_addr; // connector's address information
-    struct Request* crequest; // Client request
-    struct Response* sresponse; // Server response
-    struct hostent *host; // For host checking
+    //struct Request* crequest; // Client request
     socklen_t sin_size;
     struct sigaction sa;
-    char request[REQUEST_BUFFER_SIZE];
+    char* request = malloc(REQUEST_BUFFER_SIZE);
     char* response = malloc(1024);
     if (response != NULL)
         memset(response, '\0', sizeof(*response));
     int bytes_recvd;
-    int bytes_written = 0; // To keep track of how many bytes are in the response buffer.
-    int bytes_sent = 0;        // To keep track of the bytes sent to the client for error checking.
-    int filesize;          // File size
-    //int filepos;           // File position
     int ttl;
     int yes=1;
-    char s[INET6_ADDRSTRLEN];
     int rv;
 
     if (argc < 2 || argc > 3){
@@ -48,7 +41,6 @@ int main(int argc, char** argv){
     // Time to live, 10 as default
     if (argc == 3){
         ttl = atoi(argv[2]);
-        printf("%d", ttl);
     }else{
         ttl = 10;
     }
@@ -120,64 +112,28 @@ int main(int argc, char** argv){
             continue;
         }
 
-        /*
-        inet_ntop(their_addr.ss_family,
-            get_in_addr((struct sockaddr *)&their_addr),
-            s, sizeof s);
-        printf("server: got connection from %s\n", s);
-        */
-
-        bzero(request, sizeof(request));
-        while (!doneReceiving(request, REQUEST_BUFFER_SIZE) 
-                && (bytes_recvd = recv(new_fd, request, sizeof(request), 0)) != 0){
-            if (bytes_recvd < 0) {
-                perror("recv");
-                return -1;
-            }
-            crequest = parse(request);
-            if (crequest == NULL)
-                continue;
-            printf("after parse\n");
-            printf("%s\n", request);
-
-
-            // Persistant connections
-            if ((crequest->connection != NULL && strcmp(crequest->connection, "Keep-alive") == 0) 
-                || strcmp(crequest->httpversion, "HTTP/1.1") == 0){
-                int yes = 1;
-                if (setsockopt(new_fd, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(int)) == -1) {
-                    perror("setsockopt");
+        if (!fork()) { // this is the child process
+            printf("in child\n");
+            close(sockfd); // child doesn't need the listener
+            bzero(request, REQUEST_BUFFER_SIZE);
+            do{
+                bytes_recvd += recv(new_fd, request+bytes_recvd, sizeof(request), 0);
+                if (bytes_recvd < 0){
+                    perror("first recv");
+                }else if(bytes_recvd == 0){
                     break;
                 }
-            }
+            }while(doneReceiving(request, REQUEST_BUFFER_SIZE) == 0);
 
-            response += bytes_recvd; // Move pointer along to get contents
-        }
-        /*if (!doneReceiving(request, REQUEST_BUFFER_SIZE)){
-            sprintf(response, "%s%s", crequest->httpversion, "400 Bad Request\r\n\r\n");
-            if((bytes_sent = send(new_fd, response, strlen(response), 0)) < 0){
-                perror("400send");
-                break;
-            }
-            continue;
-        }*/
-        //request[bytes_recvd] = '\0';
-        
-        if (!fork()) { // this is the child process
-            close(sockfd); // child doesn't need the listener
-            printf("in child\n");
             remove_header(request, "If-Modified-Since: ");
-            printf("%s", request);
-
+            //printf("%s", request);
             handle_req(request, new_fd);
             
-            free(crequest);
-            //free(sresponse);
-            close(new_fd);
-            bzero(request, sizeof(*request));
+            //close(new_fd);
             exit(0);
         }
         close(new_fd);  // parent doesn't need this
+        //free(request);
     }
 
     return 0;

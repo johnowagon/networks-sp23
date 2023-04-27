@@ -21,6 +21,7 @@ int checkservs();
 typedef struct Tuple Tuple;
 enum action resolvecmd(char* cmd);
 enum serv_status resolvestatus(char* status);
+int count_lines(FILE* file);
 
 typedef enum action {LIST, GET, PUT, STATUS, UNSUPPORTED} action;
 typedef enum serv_status {SENDING, OK, DOWN} serv_status;

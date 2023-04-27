@@ -30,8 +30,6 @@ int ca_put(char* URL, char* response, int size, int filepos){
     if (dontcache(URL))
         return -1;
     // Dont save files if cache is full
-    printf("caching %s\n", URL);
-    printf("hash: %lu\n", hashed);
     files = getfileamt();
     if (files > CACHE_SIZE)
         return -1;
@@ -45,7 +43,6 @@ int ca_put(char* URL, char* response, int size, int filepos){
         return -1;
     }
     bytes_written = fwrite(response, sizeof(char), size, fp);
-    printf("by_wr: %d\n", bytes_written);
     fclose(fp);
     return bytes_written;
 }
