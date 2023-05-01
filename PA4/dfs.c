@@ -19,14 +19,17 @@ int main(int argc, char** argv){
     socklen_t sin_size;
     struct sigaction sa;
     int yes=1;
-    char s[INET6_ADDRSTRLEN];
     char recvb[100];
+    char* dirname;
     int rv;
 
     if(argc < 3){
         printf("./dfs <dir> <portno>\n");
         return -1;
     }
+
+    dirname = argv[1];
+    printf("dir: %s\n", dirname);
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
@@ -91,16 +94,11 @@ int main(int argc, char** argv){
             continue;
         }
 
-        inet_ntop(their_addr.ss_family,
-            get_in_addr((struct sockaddr *)&their_addr),
-            s, sizeof s);
-        printf("server: got connection from %s\n", s);
-
         if (!fork()) { // this is the child process
             close(sockfd); // child doesn't need the listener
             if (recv(new_fd, recvb, sizeof(recvb), 0) == -1)
                 perror("recv");
-            handle_cmd(recvb, new_fd);
+            s_handle_cmd(recvb, new_fd, dirname);
 
             close(new_fd);
             exit(0);

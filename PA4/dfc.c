@@ -14,7 +14,10 @@
 
 int main (int argc, char** argv){
     char* cmd; //
-    char* cur_filename; // Current file in list of arguments.
+    char* file;
+    enum action c_cmd;
+    int res;
+    int is_down = 0;
     if (argc < 3 && (strcasecmp(argv[1], "list") != 0)){
         printf("./dfc <cmd> <filename> ... <filename>\n");
         return -1;
@@ -28,10 +31,45 @@ int main (int argc, char** argv){
     // Get number of servers from scanning the .conf file
     // Create a data structure to hold info?
     cmd = argv[1];
-    if (checkservs() == 0){
-        printf("servers are up\n");
-    }else{
-        printf("Some servers are not started.\n");
+    is_down = checkservs();
+    if (is_down != 0)
+        printf("WARNING: Some servers are not started.\nSome commands may not work.\n");
+    c_cmd = resolvecmd(cmd);
+    switch(c_cmd){
+        case PUT:
+            for (char **pargv = argv+2; *pargv != argv[argc]; pargv++){
+                file = *pargv;
+                if (is_down == 0){
+                    res = put(file);
+                    if (res == 0){
+                        printf("Put successful for %s.\n", file);
+                    }else{
+                        printf("Problem with put for %s.\n", file);
+                    }
+                }else{
+                    printf("%s put failed.\n", file);
+                }
+            }
+            break;
+        case GET:
+            for (char **pargv = argv+2; *pargv != argv[argc]; pargv++){
+                file = *pargv;
+                if(is_down == 0){
+                    res = get(file);
+                    if (res == 0){
+                        printf("Get successful for %s.\n", file);
+                    }else{
+                        printf("Problem with get for %s.\n", file);
+                    }
+                }else{
+                    printf("%s is incomplete.\n", file);
+                }
+            }
+            break;
+        case LIST:
+            break;
+        default:
+            break;
     }
 
     return 0;

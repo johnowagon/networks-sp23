@@ -12,17 +12,25 @@
 #include <signal.h>
 unsigned long hash(char *str);
 int getfilesize(char* filename);
-int handle_cmd(char* cmd, int sockfd);
-char* sendchunks(char* filename, struct Tuple chunk_location);
+int s_handle_cmd(char* cmd, int sockfd, char* dirname);
+int s_save(int sockfd, char* filename); // Saves the contents sent by recv.
+//int send_chunk(char* filename, struct Tuple chunk_location, int sockfd);
 int get_fd_from_ip_port(char* IP, char* port);
 void *get_in_addr(struct sockaddr *sa);
+int append_file(char* f1, char* f2);
+int sendftosock(int sockfd, char* filename, int filepos);
 void sigchld_handler(int s);
 int checkservs();
 typedef struct Tuple Tuple;
 enum action resolvecmd(char* cmd);
 enum serv_status resolvestatus(char* status);
-int count_lines(FILE* file);
-
+int send_chunk(int sockfd, char* filename, struct Tuple loc);
+int put(char* filename);
+int get(char* filename);
+int list();
+int distribute(char* filename);
+int count_lines(char* file);
+typedef struct dfs_node dfs_node;
 typedef enum action {LIST, GET, PUT, STATUS, UNSUPPORTED} action;
 typedef enum serv_status {SENDING, OK, DOWN} serv_status;
 int get_fd_from_ip_port(char* IP, char* port);
