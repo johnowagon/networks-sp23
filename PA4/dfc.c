@@ -55,7 +55,7 @@ int main (int argc, char** argv){
             for (char **pargv = argv+2; *pargv != argv[argc]; pargv++){
                 file = *pargv;
                 if(is_down == 0){
-                    res = get(file);
+                    res = get2(file);
                     if (res == 0){
                         printf("Get successful for %s.\n", file);
                     }else{
@@ -67,6 +67,7 @@ int main (int argc, char** argv){
             }
             break;
         case LIST:
+            res = list();
             break;
         default:
             break;
